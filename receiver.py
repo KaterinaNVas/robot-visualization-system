@@ -8,7 +8,7 @@ def get_data(num: int):
         response = requests.get(
             f"{BASE_URL}/api/get",
             params={"num": num},
-            timeout=2
+            timeout=3
         )
 
         text = response.text.strip().replace(",", ".")
@@ -17,7 +17,6 @@ def get_data(num: int):
         return float(text)
 
     except Exception as e:
-        print(f"Ошибка чтения data{num}: {e}")
         return None
 
 

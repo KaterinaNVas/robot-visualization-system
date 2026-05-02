@@ -177,7 +177,7 @@ while running:
     ax.set_xlabel("X, mm")
     ax.set_ylabel("Y, mm")
     ax.grid(True)
-    ax.axis("equal")
+    ax.set_aspect("equal", adjustable="box")
     ax.legend()
 
     ax.set_xlim(-5000, 5000)
