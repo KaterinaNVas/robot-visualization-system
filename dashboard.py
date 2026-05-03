@@ -107,6 +107,24 @@ with st.sidebar:
         st.session_state.global_map_colors = []
         st.session_state.trajectory = []
         st.rerun()
+    if st.button("Сохранить карту"):
+        import csv
+
+        with open("map_data.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["x", "y", "distance"])
+
+            for x, y, d in zip(
+                st.session_state.global_map_x,
+                st.session_state.global_map_y,
+                st.session_state.global_map_colors
+            ):
+                writer.writerow([x, y, d])
+
+        import os
+
+        path = os.path.abspath("map_data.csv")
+        st.success(f"Карта сохранена: {path}")
 
 
 # ----------------------------
