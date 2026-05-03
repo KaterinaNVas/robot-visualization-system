@@ -26,6 +26,8 @@ if "global_map_colors" not in st.session_state:
 
 if "running" not in st.session_state:
     st.session_state.running = False
+if "connected" not in st.session_state:
+    st.session_state.connected = False
 
 
 st.title("Robot Visualization System")
@@ -33,9 +35,26 @@ st.title("Robot Visualization System")
 with st.sidebar:
     st.header("Панель управления")
 
-    st.markdown(
-        f"### Статус: {'Работает' if st.session_state.running else 'Пауза'}"
-    )
+    status = "RUNNING" if st.session_state.running else "PAUSED"
+    connection_status = "CONNECTED" if st.session_state.connected else "DISCONNECTED"
+    work_status = "RUNNING" if st.session_state.running else "PAUSED"
+
+    st.markdown(f"### Connection: `{connection_status}`")
+    st.markdown(f"### System status: `{work_status}`")
+
+    col_conn, col_disc = st.columns(2)
+
+    with col_conn:
+        if st.button("Connect"):
+            st.session_state.connected = True
+            st.session_state.running = True
+            st.rerun()
+
+    with col_disc:
+        if st.button("Disconnect"):
+            st.session_state.connected = False
+            st.session_state.running = False
+            st.rerun()
 
     col_start, col_stop = st.columns(2)
 
@@ -119,7 +138,18 @@ def robot_shape(x, y, yaw):
     return xs, ys
 
 
-raw_state = read_robot_state()
+if st.session_state.connected:
+    raw_state = read_robot_state()
+else:
+    raw_state = {
+        "x": 0,
+        "y": 0,
+        "yaw": 0,
+        "speed": 0,
+        "battery": 0,
+        "tilt": 0,
+        "lidar": []
+    }
 
 robot_x = (raw_state.get("x") or 0) * 1000
 robot_y = (raw_state.get("y") or 0) * 1000
