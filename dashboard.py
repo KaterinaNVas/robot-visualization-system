@@ -2,6 +2,7 @@ import time
 import math
 import streamlit as st
 import plotly.graph_objects as go
+import numpy as np
 
 from receiver import read_robot_state
 from lidar_processing import lidar_to_xy
@@ -200,19 +201,23 @@ if st.session_state.connected:
 
 points = lidar_to_xy(raw_state.get("lidar", []))
 
-if show_lidar and st.session_state.connected:
-    for p in points:
-        gx, gy = local_to_global(
-            p["x"],
-            p["y"],
-            robot_x,
-            robot_y,
-            yaw
-        )
+if show_lidar and st.session_state.connected and points:
 
-        st.session_state.global_map_x.append(gx)
-        st.session_state.global_map_y.append(gy)
-        st.session_state.global_map_colors.append(p["distance"])
+    # массивы локальных координат
+    local_x = np.array([p["x"] for p in points])
+    local_y = np.array([p["y"] for p in points])
+    distances = np.array([p["distance"] for p in points])
+
+    yaw_rad = np.radians(yaw)
+
+    # векторное преобразование
+    global_x = robot_x + local_x * np.cos(yaw_rad) - local_y * np.sin(yaw_rad)
+    global_y = robot_y + local_x * np.sin(yaw_rad) + local_y * np.cos(yaw_rad)
+
+    # добавляем в список
+    st.session_state.global_map_x.extend(global_x.tolist())
+    st.session_state.global_map_y.extend(global_y.tolist())
+    st.session_state.global_map_colors.extend(distances.tolist())
 
 st.session_state.global_map_x = st.session_state.global_map_x[-max_points:]
 st.session_state.global_map_y = st.session_state.global_map_y[-max_points:]
