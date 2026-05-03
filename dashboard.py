@@ -12,6 +12,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# ----------------------------
+# Session state
+# ----------------------------
+
 if "trajectory" not in st.session_state:
     st.session_state.trajectory = []
 
@@ -26,32 +30,36 @@ if "global_map_colors" not in st.session_state:
 
 if "running" not in st.session_state:
     st.session_state.running = False
+
 if "connected" not in st.session_state:
     st.session_state.connected = False
 
 
-st.title("Robot Visualization System")
+# ----------------------------
+# Sidebar
+# ----------------------------
+
+st.title("Система Визуализации Робота")
 
 with st.sidebar:
     st.header("Панель управления")
 
-    status = "RUNNING" if st.session_state.running else "PAUSED"
     connection_status = "CONNECTED" if st.session_state.connected else "DISCONNECTED"
     work_status = "RUNNING" if st.session_state.running else "PAUSED"
 
-    st.markdown(f"### Connection: `{connection_status}`")
-    st.markdown(f"### System status: `{work_status}`")
+    st.markdown(f"**Подключение:** `{connection_status}`")
+    st.markdown(f"**Состояние системы:** `{work_status}`")
 
     col_conn, col_disc = st.columns(2)
 
     with col_conn:
-        if st.button("Connect"):
+        if st.button("Подключить"):
             st.session_state.connected = True
             st.session_state.running = True
             st.rerun()
 
     with col_disc:
-        if st.button("Disconnect"):
+        if st.button("Отключить"):
             st.session_state.connected = False
             st.session_state.running = False
             st.rerun()
@@ -98,11 +106,12 @@ with st.sidebar:
         st.session_state.global_map_y = []
         st.session_state.global_map_colors = []
         st.session_state.trajectory = []
+        st.rerun()
 
 
-placeholder_metrics = st.empty()
-placeholder_map = st.empty()
-
+# ----------------------------
+# Helper functions
+# ----------------------------
 
 def local_to_global(local_x, local_y, robot_x, robot_y, yaw):
     yaw_rad = math.radians(yaw)
@@ -126,6 +135,7 @@ def robot_shape(x, y, yaw):
     ]
 
     yaw_rad = math.radians(yaw)
+
     xs = []
     ys = []
 
@@ -137,6 +147,10 @@ def robot_shape(x, y, yaw):
 
     return xs, ys
 
+
+# ----------------------------
+# Read data
+# ----------------------------
 
 if st.session_state.connected:
     raw_state = read_robot_state()
@@ -158,11 +172,17 @@ speed = raw_state.get("speed") or 0
 battery = raw_state.get("battery") or 0
 tilt = raw_state.get("tilt") or 0
 
-st.session_state.trajectory.append((robot_x, robot_y))
+
+# ----------------------------
+# Update map data
+# ----------------------------
+
+if st.session_state.connected:
+    st.session_state.trajectory.append((robot_x, robot_y))
 
 points = lidar_to_xy(raw_state.get("lidar", []))
 
-if show_lidar:
+if show_lidar and st.session_state.connected:
     for p in points:
         gx, gy = local_to_global(
             p["x"],
@@ -182,18 +202,33 @@ st.session_state.global_map_colors = st.session_state.global_map_colors[-max_poi
 st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 
+# ----------------------------
+# Metrics
+# ----------------------------
+
 if show_metrics:
-    col1, col2, col3, col4 = placeholder_metrics.columns(4)
+    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Battery", f"{battery}%")
-    col2.metric("Speed", f"{speed} m/s")
-    col3.metric("Yaw", f"{yaw}°")
-    col4.metric("Tilt", f"{tilt}°")
+    col1.metric("Батарея", f"{battery}%")
+    col2.metric("Скорость", f"{speed} м/с")
+    col3.metric("Рыскание", f"{yaw}°")
+    col4.metric("Наклон", f"{tilt}°")
 
+
+# ----------------------------
+# Visualization
+# ----------------------------
 
 fig = go.Figure()
 
 if show_lidar and st.session_state.global_map_x:
+    point_count = len(st.session_state.global_map_x)
+
+    opacity_values = [
+        0.2 + 0.8 * (i / max(point_count - 1, 1))
+        for i in range(point_count)
+    ]
+
     fig.add_trace(
         go.Scatter(
             x=st.session_state.global_map_x,
@@ -204,7 +239,8 @@ if show_lidar and st.session_state.global_map_x:
                 color=st.session_state.global_map_colors,
                 colorscale="Viridis",
                 showscale=True,
-                colorbar=dict(title="Distance, mm")
+                colorbar=dict(title="Distance, mm"),
+                opacity=opacity_values
             ),
             name="Global map"
         )
@@ -249,16 +285,39 @@ if show_robot:
     )
 
 fig.update_layout(
-    title="Real-Time Robot Map",
+    title=f"Real-Time Robot Map | Points: {len(st.session_state.global_map_x)}",
     xaxis_title="X, mm",
     yaxis_title="Y, mm",
     height=700,
-    xaxis=dict(range=[-5000, 5000], scaleanchor="y"),
-    yaxis=dict(range=[-5000, 5000]),
-    legend=dict(x=0.02, y=0.98)
+    xaxis=dict(
+        range=[-6000, 6000],
+        scaleanchor="y",
+        fixedrange=True
+    ),
+    yaxis=dict(
+        range=[-6000, 6000],
+        fixedrange=True
+    ),
+    dragmode=False,
+    legend=dict(x=0.02, y=0.98),
+    paper_bgcolor="#0E1117",
+    plot_bgcolor="#0E1117",
+    font=dict(color="white")
 )
 
-placeholder_map.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={
+        "scrollZoom": False,
+        "displayModeBar": False
+    }
+)
+
+
+# ----------------------------
+# Auto update
+# ----------------------------
 
 if st.session_state.running:
     time.sleep(refresh_rate)
