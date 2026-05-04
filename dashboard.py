@@ -3,9 +3,10 @@ import math
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+import pandas as pd
 
 from receiver import read_robot_state
-from lidar_processing import lidar_to_xy
+from lidar_processing import lidar_to_dataframe
 
 
 st.set_page_config(
@@ -109,20 +110,15 @@ with st.sidebar:
         st.session_state.trajectory = []
         st.rerun()
     if st.button("Сохранить карту"):
-        import csv
-
-        with open("map_data.csv", "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["x", "y", "distance"])
-
-            for x, y, d in zip(
-                st.session_state.global_map_x,
-                st.session_state.global_map_y,
-                st.session_state.global_map_colors
-            ):
-                writer.writerow([x, y, d])
-
         import os
+
+        map_df = pd.DataFrame({
+            "x": st.session_state.global_map_x,
+            "y": st.session_state.global_map_y,
+            "distance": st.session_state.global_map_colors
+        })
+
+        map_df.to_csv("map_data.csv", index=False)
 
         path = os.path.abspath("map_data.csv")
         st.success(f"Карта сохранена: {path}")
@@ -199,25 +195,26 @@ tilt = raw_state.get("tilt") or 0
 if st.session_state.connected:
     st.session_state.trajectory.append((robot_x, robot_y))
 
-points = lidar_to_xy(raw_state.get("lidar", []))
+lidar_df = lidar_to_dataframe(raw_state.get("lidar", []))
 
-if show_lidar and st.session_state.connected and points:
-
-    # массивы локальных координат
-    local_x = np.array([p["x"] for p in points])
-    local_y = np.array([p["y"] for p in points])
-    distances = np.array([p["distance"] for p in points])
-
+if show_lidar and st.session_state.connected and not lidar_df.empty:
     yaw_rad = np.radians(yaw)
 
-    # векторное преобразование
-    global_x = robot_x + local_x * np.cos(yaw_rad) - local_y * np.sin(yaw_rad)
-    global_y = robot_y + local_x * np.sin(yaw_rad) + local_y * np.cos(yaw_rad)
+    lidar_df["global_x"] = (
+        robot_x
+        + lidar_df["x"] * np.cos(yaw_rad)
+        - lidar_df["y"] * np.sin(yaw_rad)
+    )
 
-    # добавляем в список
-    st.session_state.global_map_x.extend(global_x.tolist())
-    st.session_state.global_map_y.extend(global_y.tolist())
-    st.session_state.global_map_colors.extend(distances.tolist())
+    lidar_df["global_y"] = (
+        robot_y
+        + lidar_df["x"] * np.sin(yaw_rad)
+        + lidar_df["y"] * np.cos(yaw_rad)
+    )
+
+    st.session_state.global_map_x.extend(lidar_df["global_x"].tolist())
+    st.session_state.global_map_y.extend(lidar_df["global_y"].tolist())
+    st.session_state.global_map_colors.extend(lidar_df["distance"].tolist())
 
 st.session_state.global_map_x = st.session_state.global_map_x[-max_points:]
 st.session_state.global_map_y = st.session_state.global_map_y[-max_points:]
@@ -236,6 +233,10 @@ if show_metrics:
     col2.metric("Скорость", f"{speed} м/с")
     col3.metric("Рыскание", f"{yaw}°")
     col4.metric("Наклон", f"{tilt}°")
+
+if show_metrics and st.session_state.connected and not lidar_df.empty:
+    with st.expander("Таблица данных лидара"):
+        st.dataframe(lidar_df, use_container_width=True)
 
 
 # ----------------------------

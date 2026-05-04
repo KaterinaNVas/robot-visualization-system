@@ -1,14 +1,15 @@
 import math
+import pandas as pd
 
 
 def lidar_to_xy(lidar_data):
     points = []
 
     for point in lidar_data:
-        angle = point["angle"]
-        distance = point["distance"]
+        angle = point.get("angle")
+        distance = point.get("distance")
 
-        if distance is None:
+        if angle is None or distance is None:
             continue
 
         angle_rad = math.radians(angle)
@@ -17,10 +18,21 @@ def lidar_to_xy(lidar_data):
         y = distance * math.sin(angle_rad)
 
         points.append({
-            "x": x,
-            "y": y,
+            "angle": angle,
             "distance": distance,
-            "angle": angle
+            "x": x,
+            "y": y
         })
 
     return points
+
+
+def lidar_to_dataframe(lidar_data):
+    points = lidar_to_xy(lidar_data)
+
+    df = pd.DataFrame(points, columns=["angle", "distance", "x", "y"])
+
+    if df.empty:
+        return df
+
+    return df
