@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
-from receiver import read_robot_state
+from receiver_ws import read_robot_state
 from lidar_processing import lidar_to_dataframe
 
 
@@ -170,6 +170,17 @@ def robot_shape(x, y, yaw):
 if st.session_state.connected:
     raw_state = read_robot_state()
 else:
+    raw_state = {
+        "x": 0,
+        "y": 0,
+        "yaw": 0,
+        "speed": 0,
+        "battery": 0,
+        "tilt": 0,
+        "lidar": []
+    }
+
+if raw_state is None:
     raw_state = {
         "x": 0,
         "y": 0,
