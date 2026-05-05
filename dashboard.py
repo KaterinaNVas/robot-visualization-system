@@ -42,6 +42,8 @@ if "connected" not in st.session_state:
 if "danger_events" not in st.session_state:
     st.session_state.danger_events = []
 
+if "last_danger_event_time" not in st.session_state:
+    st.session_state.last_danger_event_time = None
 
 # ----------------------------
 # Sidebar
@@ -400,16 +402,25 @@ if show_cv_map and st.session_state.global_map_x:
     nearest = cv_stats["nearest_obstacle_mm"]
 
     if cv_stats["danger_detected"]:
-        event = {
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "nearest_obstacle_mm": nearest,
-            "danger_radius_mm": danger_radius_mm
-        }
+        now = datetime.now()
+        should_log_event = False
 
-        if not st.session_state.danger_events or st.session_state.danger_events[-1] != event:
+        if st.session_state.last_danger_event_time is None:
+            should_log_event = True
+        else:
+            time_delta = (now - st.session_state.last_danger_event_time).total_seconds()
+            should_log_event = time_delta >= 5
+
+        if should_log_event:
+            event = {
+                "time": now.strftime("%H:%M:%S"),
+                "nearest_obstacle_mm": nearest,
+                "danger_radius_mm": danger_radius_mm
+            }
+
             st.session_state.danger_events.append(event)
-
-        st.session_state.danger_events = st.session_state.danger_events[-20:]
+            st.session_state.danger_events = st.session_state.danger_events[-20:]
+            st.session_state.last_danger_event_time = now
 
     c2.metric(
         "Ближайшее препятствие",
