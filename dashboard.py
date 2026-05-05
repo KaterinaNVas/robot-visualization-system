@@ -7,6 +7,7 @@ import pandas as pd
 
 from receiver_ws import read_robot_state
 from lidar_processing import lidar_to_dataframe
+from opencv_map import build_occupancy_map
 
 
 st.set_page_config(
@@ -86,6 +87,7 @@ with st.sidebar:
     show_trajectory = st.checkbox("Показывать траекторию", value=True)
     show_robot = st.checkbox("Показывать робота", value=True)
     show_metrics = st.checkbox("Показывать метрики", value=True)
+    show_cv_map = st.checkbox("Показывать OpenCV-карту", value=True)
 
     max_points = st.slider(
         "Количество точек карты",
@@ -127,14 +129,6 @@ with st.sidebar:
 # ----------------------------
 # Helper functions
 # ----------------------------
-
-def local_to_global(local_x, local_y, robot_x, robot_y, yaw):
-    yaw_rad = math.radians(yaw)
-
-    global_x = robot_x + local_x * math.cos(yaw_rad) - local_y * math.sin(yaw_rad)
-    global_y = robot_y + local_x * math.sin(yaw_rad) + local_y * math.cos(yaw_rad)
-
-    return global_x, global_y
 
 
 def robot_shape(x, y, yaw):
@@ -348,6 +342,22 @@ st.plotly_chart(
         "displayModeBar": False
     }
 )
+
+if show_cv_map and st.session_state.global_map_x:
+    cv_map, obstacle_count = build_occupancy_map(
+        st.session_state.global_map_x,
+        st.session_state.global_map_y,
+        st.session_state.global_map_colors
+    )
+
+    st.subheader("OpenCV Occupancy Map")
+    st.caption(f"Обнаружено контуров препятствий: {obstacle_count}")
+
+    st.image(
+        cv_map,
+        caption="Карта препятствий, построенная с использованием OpenCV",
+        use_container_width=False
+    )
 
 
 # ----------------------------
