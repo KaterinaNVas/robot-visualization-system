@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .env
 map_data.csv
+opencv_map_*.png
