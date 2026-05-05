@@ -7,7 +7,7 @@ import pandas as pd
 import cv2
 
 from datetime import datetime
-from receiver_ws import read_robot_state
+from data_receiver import read_robot_state, send_set_data
 from lidar_processing import lidar_to_dataframe
 from opencv_map import build_occupancy_map
 
@@ -53,6 +53,12 @@ st.title("Система Визуализации Робота")
 
 with st.sidebar:
     st.header("Панель управления")
+
+    data_source = st.radio(
+        "Источник данных",
+        ["WebSocket", "HTTP"],
+        index=0
+    )
 
     connection_status = "CONNECTED" if st.session_state.connected else "DISCONNECTED"
     work_status = "RUNNING" if st.session_state.running else "PAUSED"
@@ -138,6 +144,23 @@ with st.sidebar:
         step=500
     )
 
+    st.subheader("Команды роботу")
+
+    set1 = st.number_input("set_data1", value=0, step=1)
+    set2 = st.number_input("set_data2", value=0, step=1)
+    set3 = st.number_input("set_data3", value=0, step=1)
+    set4 = st.number_input("set_data4", value=0, step=1)
+
+    if st.button("Отправить команды"):
+        responses = []
+
+        responses.append(send_set_data(1, int(set1), data_source))
+        responses.append(send_set_data(2, int(set2), data_source))
+        responses.append(send_set_data(3, int(set3), data_source))
+        responses.append(send_set_data(4, int(set4), data_source))
+
+        st.success("Команды отправлены")
+        st.write(responses)
     
 
     if st.button("Очистить карту"):
@@ -197,7 +220,7 @@ def robot_shape(x, y, yaw):
 # ----------------------------
 
 if st.session_state.connected:
-    raw_state = read_robot_state()
+    raw_state = read_robot_state(data_source)
 else:
     raw_state = {
         "x": 0,
@@ -268,7 +291,7 @@ st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 if show_metrics:
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     sensor_status = "OK" if st.session_state.connected and not lidar_df.empty else "NO DATA"
 
@@ -277,6 +300,7 @@ if show_metrics:
     col3.metric("Рыскание", f"{yaw}°")
     col4.metric("Наклон", f"{tilt}°")
     col5.metric("Сенсоры", sensor_status)
+    col6.metric("Канал", data_source)
 
 if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
