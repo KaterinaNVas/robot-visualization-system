@@ -344,18 +344,32 @@ st.plotly_chart(
 )
 
 if show_cv_map and st.session_state.global_map_x:
-    cv_map, obstacle_count = build_occupancy_map(
+    cv_map, cv_stats = build_occupancy_map(
         st.session_state.global_map_x,
         st.session_state.global_map_y,
         st.session_state.global_map_colors
     )
 
     st.subheader("OpenCV Occupancy Map")
-    st.caption(f"Обнаружено контуров препятствий: {obstacle_count}")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Контуры препятствий", cv_stats["obstacle_count"])
+
+    nearest = cv_stats["nearest_obstacle_mm"]
+    c2.metric(
+        "Ближайшее препятствие",
+        f"{nearest} мм" if nearest is not None else "нет данных"
+    )
+
+    if cv_stats["danger_detected"]:
+        c3.error("Опасная зона: препятствие близко")
+    else:
+        c3.success("Опасная зона свободна")
 
     st.image(
         cv_map,
-        caption="Карта препятствий, построенная с использованием OpenCV",
+        caption="OpenCV-карта: красный — опасно близко, жёлтый — средне, зелёный — далеко",
         use_container_width=False
     )
 

@@ -8,7 +8,10 @@ def build_occupancy_map(
     map_y,
     map_distance,
     map_size_mm=12000,
-    image_size_px=600
+    image_size_px=600,
+    danger_radius_mm=1000,
+    min_distance_mm=100,
+    max_distance_mm=6000
 ):
     df = pd.DataFrame({
         "x": map_x,
@@ -16,12 +19,33 @@ def build_occupancy_map(
         "distance": map_distance
     })
 
-    image = np.zeros((image_size_px, image_size_px), dtype=np.uint8)
+    result = np.zeros((image_size_px, image_size_px, 3), dtype=np.uint8)
+
+    stats = {
+        "obstacle_count": 0,
+        "nearest_obstacle_mm": None,
+        "danger_detected": False
+    }
 
     if df.empty:
-        return image, 0
+        return result, stats
+
+    df = df[
+        (df["distance"] >= min_distance_mm) &
+        (df["distance"] <= max_distance_mm)
+    ]
+
+    if df.empty:
+        return result, stats
+
+    df["range_from_robot"] = np.sqrt(df["x"] ** 2 + df["y"] ** 2)
+
+    nearest = df["range_from_robot"].min()
+    stats["nearest_obstacle_mm"] = round(float(nearest), 1)
+    stats["danger_detected"] = bool(nearest <= danger_radius_mm)
 
     scale = image_size_px / map_size_mm
+    center = image_size_px // 2
 
     df["px"] = ((df["x"] + map_size_mm / 2) * scale).astype(int)
     df["py"] = ((map_size_mm / 2 - df["y"]) * scale).astype(int)
@@ -33,37 +57,48 @@ def build_occupancy_map(
         (df["py"] < image_size_px)
     ]
 
-    # рисуем точки лидара как маленькие круги
+    binary = np.zeros((image_size_px, image_size_px), dtype=np.uint8)
+
     for _, row in df.iterrows():
-        cv2.circle(
-            image,
-            (int(row["px"]), int(row["py"])),
-            radius=2,
-            color=255,
-            thickness=-1
-        )
+        distance = row["range_from_robot"]
 
-    kernel = np.ones((3, 3), np.uint8)
+        if distance <= danger_radius_mm:
+            color = (255, 0, 0)      # красный, опасно близко
+        elif distance <= danger_radius_mm * 2:
+            color = (255, 255, 0)    # жёлтый, средняя дистанция
+        else:
+            color = (0, 255, 0)      # зелёный, далеко
 
-    # расширяем препятствия, чтобы их было видно
-    image = cv2.dilate(image, kernel, iterations=2)
+        point = (int(row["px"]), int(row["py"]))
 
-    # сглаживаем карту
-    image = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
+        cv2.circle(result, point, 2, color, -1)
+        cv2.circle(binary, point, 2, 255, -1)
+
+    kernel = np.ones((5, 5), np.uint8)
+
+    binary = cv2.dilate(binary, kernel, iterations=2)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
 
     contours, _ = cv2.findContours(
-        image,
+        binary,
         cv2.RETR_EXTERNAL,
         cv2.CHAIN_APPROX_SIMPLE
     )
 
-    result = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    filtered_contours = [
+        contour for contour in contours
+        if cv2.contourArea(contour) > 10
+    ]
 
-    # контуры препятствий зелёным
-    cv2.drawContours(result, contours, -1, (0, 255, 0), 1)
+    stats["obstacle_count"] = len(filtered_contours)
 
-    # робот в центре карты
-    center = image_size_px // 2
-    cv2.circle(result, (center, center), 5, (255, 0, 0), -1)
+    cv2.drawContours(result, filtered_contours, -1, (255, 255, 255), 1)
 
-    return result, len(contours)
+    danger_radius_px = int(danger_radius_mm * scale)
+
+    danger_color = (255, 0, 0) if stats["danger_detected"] else (0, 255, 255)
+
+    cv2.circle(result, (center, center), danger_radius_px, danger_color, 1)
+    cv2.circle(result, (center, center), 5, (0, 0, 255), -1)
+
+    return result, stats
