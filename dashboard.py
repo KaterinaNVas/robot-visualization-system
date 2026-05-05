@@ -105,6 +105,34 @@ with st.sidebar:
         step=0.1
     )
 
+    st.subheader("Настройки OpenCV")
+
+    danger_radius_mm = st.slider(
+        "Радиус опасной зоны, мм",
+        min_value=300,
+        max_value=3000,
+        value=1000,
+        step=100
+    )
+
+    min_distance_mm = st.slider(
+        "Минимальная дистанция лидара, мм",
+        min_value=0,
+        max_value=1000,
+        value=100,
+        step=50
+    )
+
+    max_distance_mm = st.slider(
+        "Максимальная дистанция лидара, мм",
+        min_value=1000,
+        max_value=10000,
+        value=6000,
+        step=500
+    )
+
+    
+
     if st.button("Очистить карту"):
         st.session_state.global_map_x = []
         st.session_state.global_map_y = []
@@ -232,12 +260,16 @@ st.session_state.trajectory = st.session_state.trajectory[-300:]
 # ----------------------------
 
 if show_metrics:
-    col1, col2, col3, col4 = st.columns(4)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    sensor_status = "OK" if st.session_state.connected and not lidar_df.empty else "NO DATA"
 
     col1.metric("Батарея", f"{battery}%")
     col2.metric("Скорость", f"{speed} м/с")
     col3.metric("Рыскание", f"{yaw}°")
     col4.metric("Наклон", f"{tilt}°")
+    col5.metric("Сенсоры", sensor_status)
 
 if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
@@ -344,10 +376,14 @@ st.plotly_chart(
 )
 
 if show_cv_map and st.session_state.global_map_x:
+    
     cv_map, cv_stats = build_occupancy_map(
         st.session_state.global_map_x,
         st.session_state.global_map_y,
-        st.session_state.global_map_colors
+        st.session_state.global_map_colors,
+        danger_radius_mm=danger_radius_mm,
+        min_distance_mm=min_distance_mm,
+        max_distance_mm=max_distance_mm
     )
 
     st.subheader("OpenCV Occupancy Map")
