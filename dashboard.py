@@ -4,7 +4,9 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
+import cv2
 
+from datetime import datetime
 from receiver_ws import read_robot_state
 from lidar_processing import lidar_to_dataframe
 from opencv_map import build_occupancy_map
@@ -36,6 +38,9 @@ if "running" not in st.session_state:
 
 if "connected" not in st.session_state:
     st.session_state.connected = False
+
+if "danger_events" not in st.session_state:
+    st.session_state.danger_events = []
 
 
 # ----------------------------
@@ -376,7 +381,7 @@ st.plotly_chart(
 )
 
 if show_cv_map and st.session_state.global_map_x:
-    
+
     cv_map, cv_stats = build_occupancy_map(
         st.session_state.global_map_x,
         st.session_state.global_map_y,
@@ -393,6 +398,19 @@ if show_cv_map and st.session_state.global_map_x:
     c1.metric("Контуры препятствий", cv_stats["obstacle_count"])
 
     nearest = cv_stats["nearest_obstacle_mm"]
+
+    if cv_stats["danger_detected"]:
+        event = {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "nearest_obstacle_mm": nearest,
+            "danger_radius_mm": danger_radius_mm
+        }
+
+        if not st.session_state.danger_events or st.session_state.danger_events[-1] != event:
+            st.session_state.danger_events.append(event)
+
+        st.session_state.danger_events = st.session_state.danger_events[-20:]
+
     c2.metric(
         "Ближайшее препятствие",
         f"{nearest} мм" if nearest is not None else "нет данных"
@@ -408,6 +426,20 @@ if show_cv_map and st.session_state.global_map_x:
         caption="OpenCV-карта: красный — опасно близко, жёлтый — средне, зелёный — далеко",
         use_container_width=False
     )
+
+    if st.button("Сохранить OpenCV-карту PNG"):
+        filename = f"opencv_map_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+        cv2.imwrite(filename, cv2.cvtColor(cv_map, cv2.COLOR_RGB2BGR))
+
+        st.success(f"OpenCV-карта сохранена: {filename}")
+
+    if st.session_state.danger_events:
+        with st.expander("Журнал опасных событий"):
+            st.dataframe(
+                pd.DataFrame(st.session_state.danger_events),
+                use_container_width=True
+            )
 
 
 # ----------------------------
