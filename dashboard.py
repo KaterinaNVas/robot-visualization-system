@@ -218,6 +218,7 @@ def robot_shape(x, y, yaw):
 # ----------------------------
 # Read data
 # ----------------------------
+read_start_time = time.time()
 
 if st.session_state.connected:
     raw_state = read_robot_state(data_source)
@@ -242,6 +243,10 @@ if raw_state is None:
         "tilt": 0,
         "lidar": []
     }
+
+read_latency_ms = round((time.time() - read_start_time) * 1000, 1)
+last_packet_time = datetime.now().strftime("%H:%M:%S")
+lidar_points_count = len(raw_state.get("lidar", [])) if raw_state else 0
 
 robot_x = (raw_state.get("x") or 0) * 1000
 robot_y = (raw_state.get("y") or 0) * 1000
@@ -291,7 +296,7 @@ st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 if show_metrics:
 
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns(9)
 
     sensor_status = "OK" if st.session_state.connected and not lidar_df.empty else "NO DATA"
 
@@ -301,6 +306,9 @@ if show_metrics:
     col4.metric("Наклон", f"{tilt}°")
     col5.metric("Сенсоры", sensor_status)
     col6.metric("Канал", data_source)
+    col7.metric("Точек лидара", lidar_points_count)
+    col8.metric("Задержка", f"{read_latency_ms} мс")
+    col9.metric("Последний пакет", last_packet_time)
 
 if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
