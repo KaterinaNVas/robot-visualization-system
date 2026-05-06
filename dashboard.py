@@ -314,6 +314,24 @@ if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
         st.dataframe(lidar_df, use_container_width=True)
 
+if show_metrics:
+    with st.expander("Состояние сенсоров и телеметрии"):
+        connection_ok = st.session_state.connected
+        lidar_ok = not lidar_df.empty
+        position_ok = raw_state.get("x") is not None and raw_state.get("y") is not None
+        battery_ok = battery is not None and battery > 0
+        telemetry_ok = raw_state is not None and isinstance(raw_state, dict)
+
+        sensor_df = pd.DataFrame([
+            {"Модуль": "Connection", "Статус": "OK" if connection_ok else "NO DATA"},
+            {"Модуль": "LiDAR", "Статус": "OK" if lidar_ok else "NO DATA"},
+            {"Модуль": "Position", "Статус": "OK" if position_ok else "NO DATA"},
+            {"Модуль": "Battery", "Статус": "OK" if battery_ok else "NO DATA"},
+            {"Модуль": "Telemetry", "Статус": "OK" if telemetry_ok else "NO DATA"},
+        ])
+
+        st.dataframe(sensor_df, use_container_width=True)
+
 
 # ----------------------------
 # Visualization
