@@ -4,3 +4,4 @@ __pycache__/
 .env
 map_data.csv
 opencv_map_*.png
+danger_events_*.csv

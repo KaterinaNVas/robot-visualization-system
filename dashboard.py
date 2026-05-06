@@ -471,10 +471,26 @@ if show_cv_map and st.session_state.global_map_x:
 
     if st.session_state.danger_events:
         with st.expander("Журнал опасных событий"):
+            danger_df = pd.DataFrame(st.session_state.danger_events)
+
             st.dataframe(
-                pd.DataFrame(st.session_state.danger_events),
+                danger_df,
                 use_container_width=True
             )
+
+            col_save_log, col_clear_log = st.columns(2)
+
+            with col_save_log:
+                if st.button("Сохранить журнал CSV"):
+                    filename = f"danger_events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    danger_df.to_csv(filename, index=False)
+                    st.success(f"Журнал сохранён: {filename}")
+
+            with col_clear_log:
+                if st.button("Очистить журнал"):
+                    st.session_state.danger_events = []
+                    st.session_state.last_danger_event_time = None
+                    st.rerun()
 
 
 # ----------------------------
