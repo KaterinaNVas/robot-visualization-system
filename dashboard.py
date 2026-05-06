@@ -314,6 +314,25 @@ if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
         st.dataframe(lidar_df, use_container_width=True)
 
+if show_metrics:
+    with st.expander("Состояние сенсоров и телеметрии"):
+
+        connection_ok = st.session_state.connected
+        lidar_ok = not lidar_df.empty
+        position_ok = raw_state.get("x") is not None and raw_state.get("y") is not None
+        battery_ok = battery is not None and battery > 0
+        telemetry_ok = raw_state is not None and isinstance(raw_state, dict)
+
+        sensor_df = pd.DataFrame([
+            {"Модуль": "Connection", "Статус": "OK" if connection_ok else "NO DATA"},
+            {"Модуль": "LiDAR", "Статус": "OK" if lidar_ok else "NO DATA"},
+            {"Модуль": "Position", "Статус": "OK" if position_ok else "NO DATA"},
+            {"Модуль": "Battery", "Статус": "OK" if battery_ok else "NO DATA"},
+            {"Модуль": "Telemetry", "Статус": "OK" if telemetry_ok else "NO DATA"},
+        ])
+
+        st.dataframe(sensor_df, use_container_width=True)
+
 
 
 
@@ -465,11 +484,19 @@ if show_cv_map and st.session_state.global_map_x:
 
     st.subheader("OpenCV Occupancy Map")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
     c1.metric("Контуры препятствий", cv_stats["obstacle_count"])
 
     nearest = cv_stats["nearest_obstacle_mm"]
+
+    collision_risk = "LOW"
+
+    if nearest is not None:
+        if nearest <= danger_radius_mm and speed > 0.4:
+            collision_risk = "HIGH"
+        elif nearest <= danger_radius_mm:
+            collision_risk = "MEDIUM"
 
     if cv_stats["danger_detected"]:
         now = datetime.now()
@@ -501,6 +528,13 @@ if show_cv_map and st.session_state.global_map_x:
         c3.error("Опасная зона: препятствие близко")
     else:
         c3.success("Опасная зона свободна")
+
+    if collision_risk == "HIGH":
+        c4.error("Риск столкновения: HIGH")
+    elif collision_risk == "MEDIUM":
+        c4.warning("Риск столкновения: MEDIUM")
+    else:
+        c4.success("Риск столкновения: LOW")
 
     st.image(
         cv_map,
