@@ -45,6 +45,9 @@ if "danger_events" not in st.session_state:
 if "last_danger_event_time" not in st.session_state:
     st.session_state.last_danger_event_time = None
 
+if "telemetry_history" not in st.session_state:
+    st.session_state.telemetry_history = []
+
 # ----------------------------
 # Sidebar
 # ----------------------------
@@ -257,6 +260,20 @@ speed = raw_state.get("speed") or 0
 battery = raw_state.get("battery") or 0
 tilt = raw_state.get("tilt") or 0
 
+
+if st.session_state.connected:
+    st.session_state.telemetry_history.append({
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "speed": speed,
+        "battery": battery,
+        "yaw": yaw,
+        "tilt": tilt,
+        "latency_ms": read_latency_ms,
+        "lidar_points": lidar_points_count
+    })
+
+    st.session_state.telemetry_history = st.session_state.telemetry_history[-100:]
+
 if record_telemetry and st.session_state.connected:
     telemetry_row = pd.DataFrame([{
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -336,6 +353,24 @@ if show_metrics:
 if show_metrics and st.session_state.connected and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
         st.dataframe(lidar_df, use_container_width=True)
+
+if show_metrics and st.session_state.telemetry_history:
+    with st.expander("Графики телеметрии во времени"):
+        telemetry_df = pd.DataFrame(st.session_state.telemetry_history)
+
+        st.line_chart(
+            telemetry_df,
+            x="time",
+            y=["speed", "battery", "latency_ms"],
+            use_container_width=True
+        )
+
+        st.line_chart(
+            telemetry_df,
+            x="time",
+            y=["yaw", "tilt"],
+            use_container_width=True
+        )
 
 if show_metrics:
     with st.expander("Состояние сенсоров и телеметрии"):
