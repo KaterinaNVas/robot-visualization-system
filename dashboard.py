@@ -10,6 +10,7 @@ from datetime import datetime
 from data_receiver import read_robot_state, send_set_data
 from lidar_processing import lidar_to_dataframe
 from opencv_map import build_occupancy_map
+from lidar_parser import parse_lidar_data
 
 
 st.set_page_config(
@@ -17,9 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ----------------------------
 # Session state
-# ----------------------------
 
 if "trajectory" not in st.session_state:
     st.session_state.trajectory = []
@@ -48,9 +47,7 @@ if "last_danger_event_time" not in st.session_state:
 if "telemetry_history" not in st.session_state:
     st.session_state.telemetry_history = []
 
-# ----------------------------
 # Sidebar
-# ----------------------------
 
 st.title("Система Визуализации Робота")
 
@@ -61,6 +58,16 @@ with st.sidebar:
         "Источник данных",
         ["WebSocket", "HTTP"],
         index=0
+    )
+
+    lidar_model = st.radio(
+        "Модель лидара",
+        ["Delta2A", "Delta2D"],
+        index=0
+    )
+
+    uploaded_lidar_file = st.file_uploader(
+        "Загрузить HEX-файл Delta2D", type=["txt"]
     )
 
     connection_status = "CONNECTED" if st.session_state.connected else "DISCONNECTED"
@@ -189,9 +196,7 @@ with st.sidebar:
         st.success(f"Карта сохранена: {path}")
 
 
-# ----------------------------
 # Helper functions
-# ----------------------------
 
 
 def robot_shape(x, y, yaw):
@@ -219,10 +224,8 @@ def robot_shape(x, y, yaw):
 
     return xs, ys
 
-
-# ----------------------------
 # Read data
-# ----------------------------
+
 read_start_time = time.time()
 
 if st.session_state.connected:
@@ -249,7 +252,18 @@ if raw_state is None:
         "lidar": []
     }
 
+
+if uploaded_lidar_file is not None:
+    hex_text = uploaded_lidar_file.read().decode("utf-8")
+    raw_state["lidar"] = parse_lidar_data(hex_text, lidar_model)
+
+lidar_data_available = (
+    st.session_state.connected
+    or uploaded_lidar_file is not None
+)
+
 read_latency_ms = round((time.time() - read_start_time) * 1000, 1)
+
 last_packet_time = datetime.now().strftime("%H:%M:%S")
 lidar_points_count = len(raw_state.get("lidar", [])) if raw_state else 0
 
@@ -296,16 +310,14 @@ if record_telemetry and st.session_state.connected:
     )
 
 
-# ----------------------------
 # Update map data
-# ----------------------------
 
 if st.session_state.connected:
     st.session_state.trajectory.append((robot_x, robot_y))
 
 lidar_df = lidar_to_dataframe(raw_state.get("lidar", []))
 
-if show_lidar and st.session_state.connected and not lidar_df.empty:
+if show_lidar and lidar_data_available and not lidar_df.empty:
     yaw_rad = np.radians(yaw)
 
     lidar_df["global_x"] = (
@@ -330,15 +342,13 @@ st.session_state.global_map_colors = st.session_state.global_map_colors[-max_poi
 st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 
-# ----------------------------
 # Metrics
-# ----------------------------
 
 if show_metrics:
 
     col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns(9)
 
-    sensor_status = "OK" if st.session_state.connected and not lidar_df.empty else "NO DATA"
+    sensor_status = "OK" if lidar_data_available and not lidar_df.empty else "NO DATA"
 
     col1.metric("Батарея", f"{battery}%")
     col2.metric("Скорость", f"{speed} м/с")
@@ -350,7 +360,7 @@ if show_metrics:
     col8.metric("Задержка", f"{read_latency_ms} мс")
     col9.metric("Последний пакет", last_packet_time)
 
-if show_metrics and st.session_state.connected and not lidar_df.empty:
+if show_metrics and lidar_data_available and not lidar_df.empty:
     with st.expander("Таблица данных лидара"):
         st.dataframe(lidar_df, use_container_width=True)
 
@@ -394,9 +404,7 @@ if show_metrics:
 
 
 
-# ----------------------------
 # Visualization
-# ----------------------------
 
 fig = go.Figure()
 
@@ -465,7 +473,7 @@ if show_robot:
 
 if (
     show_cv_map
-    and st.session_state.connected
+    and lidar_data_available
     and not lidar_df.empty
     and "global_x" in lidar_df.columns
     and "global_y" in lidar_df.columns
@@ -631,9 +639,7 @@ if show_cv_map and st.session_state.global_map_x:
                     st.rerun()
 
 
-# ----------------------------
 # Auto update
-# ----------------------------
 
 if st.session_state.running:
     time.sleep(refresh_rate)
