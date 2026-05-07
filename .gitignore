@@ -5,3 +5,4 @@ __pycache__/
 map_data.csv
 opencv_map_*.png
 danger_events_*.csv
+telemetry_log.csv

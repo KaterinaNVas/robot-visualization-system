@@ -118,6 +118,8 @@ with st.sidebar:
         step=0.1
     )
 
+    record_telemetry = st.checkbox("Записывать телеметрию в CSV", value=False)
+
     st.subheader("Настройки OpenCV")
 
     danger_radius_mm = st.slider(
@@ -254,6 +256,27 @@ yaw = raw_state.get("yaw") or 0
 speed = raw_state.get("speed") or 0
 battery = raw_state.get("battery") or 0
 tilt = raw_state.get("tilt") or 0
+
+if record_telemetry and st.session_state.connected:
+    telemetry_row = pd.DataFrame([{
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "x_mm": robot_x,
+        "y_mm": robot_y,
+        "yaw_deg": yaw,
+        "speed_m_s": speed,
+        "battery_percent": battery,
+        "tilt_deg": tilt,
+        "lidar_points": lidar_points_count,
+        "data_source": data_source,
+        "read_latency_ms": read_latency_ms
+    }])
+
+    telemetry_row.to_csv(
+        "telemetry_log.csv",
+        mode="a",
+        header=not pd.io.common.file_exists("telemetry_log.csv"),
+        index=False
+    )
 
 
 # ----------------------------
