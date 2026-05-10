@@ -13,6 +13,7 @@ from opencv_map import build_occupancy_map
 from lidar_parser import parse_lidar_data
 # from room_builder import build_room_contour_from_global_points
 from room_builder import build_room_contour
+from occupancy_grid import init_occupancy_grid, update_occupancy_grid, render_occupancy_grid
 
 
 st.set_page_config(
@@ -48,6 +49,9 @@ if "last_danger_event_time" not in st.session_state:
 
 if "telemetry_history" not in st.session_state:
     st.session_state.telemetry_history = []
+
+if "occupancy_grid" not in st.session_state:
+    st.session_state.occupancy_grid = init_occupancy_grid()
 
 # Sidebar
 
@@ -114,6 +118,7 @@ with st.sidebar:
     show_metrics = st.checkbox("Показывать метрики", value=True)
     show_cv_map = st.checkbox("Показывать OpenCV-карту", value=True)
     show_room_contour = st.checkbox("Показывать контур комнаты", value=True)
+    show_occupancy_grid = st.checkbox("Показывать Occupancy Grid", value=True)
 
     max_points = st.slider(
         "Количество точек карты",
@@ -183,7 +188,9 @@ with st.sidebar:
         st.session_state.global_map_y = []
         st.session_state.global_map_colors = []
         st.session_state.trajectory = []
+        st.session_state.occupancy_grid = init_occupancy_grid()
         st.rerun()
+    
     if st.button("Сохранить карту"):
         import os
 
@@ -628,6 +635,8 @@ if show_cv_map and st.session_state.global_map_x:
         use_container_width=False
     )
 
+    
+
     if st.button("Сохранить OpenCV-карту PNG"):
         filename = f"opencv_map_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
 
@@ -658,6 +667,36 @@ if show_cv_map and st.session_state.global_map_x:
                     st.session_state.last_danger_event_time = None
                     st.rerun()
 
+if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns:
+    st.session_state.occupancy_grid = update_occupancy_grid(
+        st.session_state.occupancy_grid,
+        lidar_df,
+        robot_x=robot_x,
+        robot_y=robot_y,
+        min_distance_mm=min_distance_mm,
+        max_distance_mm=max_distance_mm
+    )
+
+    occupancy_image = render_occupancy_grid(
+        st.session_state.occupancy_grid,
+        robot_x=robot_x,
+        robot_y=robot_y
+    )
+
+    st.subheader("Occupancy Grid Map")
+
+    st.caption(
+        "Тёмное — неизвестная область, "
+        "серое — свободное пространство, "
+        "чёрное — препятствия, "
+        "красное — робот"
+    )
+
+    st.image(
+        occupancy_image,
+        caption="Накопительная карта помещения",
+        use_container_width=False
+    )
 
 # Auto update
 
