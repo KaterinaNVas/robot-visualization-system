@@ -11,6 +11,8 @@ from data_receiver import read_robot_state, send_set_data
 from lidar_processing import lidar_to_dataframe
 from opencv_map import build_occupancy_map
 from lidar_parser import parse_lidar_data
+# from room_builder import build_room_contour_from_global_points
+from room_builder import build_room_contour
 
 
 st.set_page_config(
@@ -111,6 +113,7 @@ with st.sidebar:
     show_robot = st.checkbox("Показывать робота", value=True)
     show_metrics = st.checkbox("Показывать метрики", value=True)
     show_cv_map = st.checkbox("Показывать OpenCV-карту", value=True)
+    show_room_contour = st.checkbox("Показывать контур комнаты", value=True)
 
     max_points = st.slider(
         "Количество точек карты",
@@ -316,6 +319,11 @@ if st.session_state.connected:
     st.session_state.trajectory.append((robot_x, robot_y))
 
 lidar_df = lidar_to_dataframe(raw_state.get("lidar", []))
+room_df = build_room_contour(
+    raw_state.get("lidar", []),
+    min_distance_mm=min_distance_mm,
+    max_distance_mm=max_distance_mm
+)
 
 if show_lidar and lidar_data_available and not lidar_df.empty:
     yaw_rad = np.radians(yaw)
@@ -433,6 +441,18 @@ if show_lidar and st.session_state.global_map_x:
         )
     )
 
+if show_room_contour and not room_df.empty:
+    fig.add_trace(
+        go.Scatter(
+            x=robot_x + room_df["x"],
+            y=robot_y + room_df["y"],
+            mode="lines",
+            name="Room contour",
+            line=dict(width=3)
+        )
+    )
+
+
 if show_trajectory and st.session_state.trajectory:
     tx = [p[0] for p in st.session_state.trajectory]
     ty = [p[1] for p in st.session_state.trajectory]
@@ -513,12 +533,12 @@ fig.update_layout(
     yaxis_title="Y, mm",
     height=700,
     xaxis=dict(
-        range=[-6000, 6000],
+        range=[-8000, 8000],
         scaleanchor="y",
         fixedrange=True
     ),
     yaxis=dict(
-        range=[-6000, 6000],
+        range=[-8000, 8000],
         fixedrange=True
     ),
     dragmode=False,
