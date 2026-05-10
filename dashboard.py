@@ -16,6 +16,7 @@ from room_builder import build_room_contour
 from occupancy_grid import init_occupancy_grid, update_occupancy_grid, render_occupancy_grid
 
 
+
 st.set_page_config(
     page_title="Robot Visualization System",
     layout="wide"
@@ -52,6 +53,7 @@ if "telemetry_history" not in st.session_state:
 
 if "occupancy_grid" not in st.session_state:
     st.session_state.occupancy_grid = init_occupancy_grid()
+
 
 # Sidebar
 
