@@ -11,10 +11,9 @@ from data_receiver import read_robot_state, send_set_data
 from lidar_processing import lidar_to_dataframe
 from opencv_map import build_occupancy_map
 from lidar_parser import parse_lidar_data
-# from room_builder import build_room_contour_from_global_points
 from room_builder import build_room_contour
 from occupancy_grid import init_occupancy_grid, update_occupancy_grid, render_occupancy_grid
-
+from enhanced_occupancy_grid import EnhancedOccupancyGrid
 
 
 st.set_page_config(
@@ -22,7 +21,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Session state
+# ============================================
+# Session state initialization
+# ============================================
 
 if "trajectory" not in st.session_state:
     st.session_state.trajectory = []
@@ -54,8 +55,23 @@ if "telemetry_history" not in st.session_state:
 if "occupancy_grid" not in st.session_state:
     st.session_state.occupancy_grid = init_occupancy_grid()
 
+# Enhanced occupancy grid for clean 2D map
+if "enhanced_grid" not in st.session_state:
+    st.session_state.enhanced_grid = EnhancedOccupancyGrid(
+        map_size_mm=12000,
+        cell_size_mm=50,
+        robot_radius_mm=250,
+        min_distance_mm=150,
+        max_distance_mm=6000
+    )
 
+if "cleaned_trajectory" not in st.session_state:
+    st.session_state.cleaned_trajectory = []
+
+
+# ============================================
 # Sidebar
+# ============================================
 
 st.title("Система Визуализации Робота")
 
@@ -75,7 +91,8 @@ with st.sidebar:
     )
 
     uploaded_lidar_file = st.file_uploader(
-        "Загрузить HEX-файл Delta2D", type=["txt"]
+        "Загрузить HEX-файл Delta2D", type=["txt"],
+        help="Загрузите файл с данными лидара в HEX-формате для визуализации без подключения к роботу"
     )
 
     connection_status = "CONNECTED" if st.session_state.connected else "DISCONNECTED"
@@ -114,6 +131,9 @@ with st.sidebar:
         st.session_state.running = False
         st.rerun()
 
+    st.divider()
+
+    # Visualization toggles
     show_lidar = st.checkbox("Показывать лидар", value=True)
     show_trajectory = st.checkbox("Показывать траекторию", value=True)
     show_robot = st.checkbox("Показывать робота", value=True)
@@ -122,6 +142,57 @@ with st.sidebar:
     show_room_contour = st.checkbox("Показывать контур комнаты", value=True)
     show_occupancy_grid = st.checkbox("Показывать Occupancy Grid", value=True)
 
+    st.divider()
+
+    # Enhanced map settings
+    st.subheader("🗺️ Настройки четкой карты")
+    show_enhanced_map = st.checkbox("Показывать четкую 2D карту", value=True)
+
+    col_cell_size, col_robot_radius = st.columns(2)
+    with col_cell_size:
+        cell_size = st.select_slider(
+            "Размер ячейки (мм)",
+            options=[25, 50, 75, 100],
+            value=50,
+            help="Меньше = детальнее, но медленнее"
+        )
+    with col_robot_radius:
+        robot_radius = st.slider(
+            "Радиус робота (мм)",
+            min_value=150,
+            max_value=400,
+            value=250,
+            step=25
+        )
+
+    # Update enhanced grid parameters if changed
+    if cell_size != st.session_state.enhanced_grid.cell_size_mm or \
+       robot_radius != st.session_state.enhanced_grid.robot_radius_mm:
+        st.session_state.enhanced_grid = EnhancedOccupancyGrid(
+            map_size_mm=12000,
+            cell_size_mm=cell_size,
+            robot_radius_mm=robot_radius,
+            min_distance_mm=150,
+            max_distance_mm=6000
+        )
+        if st.session_state.cleaned_trajectory:
+            st.session_state.cleaned_trajectory = st.session_state.cleaned_trajectory.copy()
+        st.rerun()
+
+    col_clear_enhanced, col_export_enhanced = st.columns(2)
+    with col_clear_enhanced:
+        if st.button("🗑️ Очистить четкую карту"):
+            st.session_state.enhanced_grid.clear()
+            st.session_state.cleaned_trajectory = []
+            st.rerun()
+    with col_export_enhanced:
+        if st.button("💾 Экспортировать четкую карту"):
+            png_file, csv_file = st.session_state.enhanced_grid.export_map("robot_map")
+            st.success(f"Сохранено: {png_file} и {csv_file}")
+
+    st.divider()
+
+    # Map settings
     max_points = st.slider(
         "Количество точек карты",
         min_value=200,
@@ -183,7 +254,6 @@ with st.sidebar:
 
         st.success("Команды отправлены")
         st.write(responses)
-    
 
     if st.button("Очистить карту"):
         st.session_state.global_map_x = []
@@ -192,7 +262,7 @@ with st.sidebar:
         st.session_state.trajectory = []
         st.session_state.occupancy_grid = init_occupancy_grid()
         st.rerun()
-    
+
     if st.button("Сохранить карту"):
         import os
 
@@ -208,8 +278,9 @@ with st.sidebar:
         st.success(f"Карта сохранена: {path}")
 
 
+# ============================================
 # Helper functions
-
+# ============================================
 
 def robot_shape(x, y, yaw):
     length = 400
@@ -236,7 +307,10 @@ def robot_shape(x, y, yaw):
 
     return xs, ys
 
+
+# ============================================
 # Read data
+# ============================================
 
 read_start_time = time.time()
 
@@ -264,10 +338,16 @@ if raw_state is None:
         "lidar": []
     }
 
-
+# Если загружен HEX-файл, используем его данные вместо данных от робота
 if uploaded_lidar_file is not None:
     hex_text = uploaded_lidar_file.read().decode("utf-8")
-    raw_state["lidar"] = parse_lidar_data(hex_text, lidar_model)
+    parsed_lidar = parse_lidar_data(hex_text, lidar_model)
+    raw_state["lidar"] = parsed_lidar
+    # При загрузке файла позиционируем робота в центр
+    if not st.session_state.connected:
+        raw_state["x"] = 0
+        raw_state["y"] = 0
+        raw_state["yaw"] = 0
 
 lidar_data_available = (
     st.session_state.connected
@@ -286,6 +366,10 @@ speed = raw_state.get("speed") or 0
 battery = raw_state.get("battery") or 0
 tilt = raw_state.get("tilt") or 0
 
+
+# ============================================
+# Telemetry logging
+# ============================================
 
 if st.session_state.connected:
     st.session_state.telemetry_history.append({
@@ -322,7 +406,9 @@ if record_telemetry and st.session_state.connected:
     )
 
 
+# ============================================
 # Update map data
+# ============================================
 
 if st.session_state.connected:
     st.session_state.trajectory.append((robot_x, robot_y))
@@ -334,24 +420,40 @@ room_df = build_room_contour(
     max_distance_mm=max_distance_mm
 )
 
-if show_lidar and lidar_data_available and not lidar_df.empty:
-    yaw_rad = np.radians(yaw)
-
-    lidar_df["global_x"] = (
-        robot_x
-        + lidar_df["x"] * np.cos(yaw_rad)
-        - lidar_df["y"] * np.sin(yaw_rad)
-    )
-
-    lidar_df["global_y"] = (
-        robot_y
-        + lidar_df["x"] * np.sin(yaw_rad)
-        + lidar_df["y"] * np.cos(yaw_rad)
-    )
-
-    st.session_state.global_map_x.extend(lidar_df["global_x"].tolist())
-    st.session_state.global_map_y.extend(lidar_df["global_y"].tolist())
-    st.session_state.global_map_colors.extend(lidar_df["distance"].tolist())
+# Обработка данных лидара для глобальной карты
+if lidar_data_available and not lidar_df.empty:
+    if uploaded_lidar_file is not None and not st.session_state.connected:
+        # Режим загрузки файла: точки уже в локальных координатах робота
+        # Робот находится в центре (0,0)
+        lidar_df["global_x"] = lidar_df["x"]
+        lidar_df["global_y"] = lidar_df["y"]
+        
+        st.session_state.global_map_x.extend(lidar_df["global_x"].tolist())
+        st.session_state.global_map_y.extend(lidar_df["global_y"].tolist())
+        st.session_state.global_map_colors.extend(lidar_df["distance"].tolist())
+        
+        # Добавляем начальную точку траектории (центр)
+        if not st.session_state.trajectory:
+            st.session_state.trajectory.append((0, 0))
+    else:
+        # Режим реального робота: преобразуем координаты с учетом положения и поворота
+        yaw_rad = np.radians(yaw)
+        
+        lidar_df["global_x"] = (
+            robot_x
+            + lidar_df["x"] * np.cos(yaw_rad)
+            - lidar_df["y"] * np.sin(yaw_rad)
+        )
+        
+        lidar_df["global_y"] = (
+            robot_y
+            + lidar_df["x"] * np.sin(yaw_rad)
+            + lidar_df["y"] * np.cos(yaw_rad)
+        )
+        
+        st.session_state.global_map_x.extend(lidar_df["global_x"].tolist())
+        st.session_state.global_map_y.extend(lidar_df["global_y"].tolist())
+        st.session_state.global_map_colors.extend(lidar_df["distance"].tolist())
 
 st.session_state.global_map_x = st.session_state.global_map_x[-max_points:]
 st.session_state.global_map_y = st.session_state.global_map_y[-max_points:]
@@ -359,20 +461,50 @@ st.session_state.global_map_colors = st.session_state.global_map_colors[-max_poi
 st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 
-# Metrics
+# ============================================
+# Update enhanced occupancy grid
+# ============================================
+
+if st.session_state.connected and not lidar_df.empty:
+    st.session_state.cleaned_trajectory.append((robot_x, robot_y))
+    max_trajectory = 500
+    if len(st.session_state.cleaned_trajectory) > max_trajectory:
+        st.session_state.cleaned_trajectory = st.session_state.cleaned_trajectory[-max_trajectory:]
+
+    try:
+        st.session_state.enhanced_grid.update(
+            lidar_df,
+            robot_x,
+            robot_y,
+            yaw
+        )
+    except Exception as e:
+        st.error(f"Ошибка обновления четкой карты: {e}")
+
+
+# ============================================
+# Metrics display
+# ============================================
 
 if show_metrics:
-
     col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns(9)
 
     sensor_status = "OK" if lidar_data_available and not lidar_df.empty else "NO DATA"
-
-    col1.metric("Батарея", f"{battery}%")
-    col2.metric("Скорость", f"{speed} м/с")
-    col3.metric("Рыскание", f"{yaw}°")
-    col4.metric("Наклон", f"{tilt}°")
+    
+    # Для загруженного файла показываем особые метрики
+    if uploaded_lidar_file is not None and not st.session_state.connected:
+        col1.metric("Режим", "HEX файл")
+        col2.metric("Точек лидара", lidar_points_count)
+        col3.metric("Диапазон", f"{min_distance_mm}-{max_distance_mm} мм")
+        col4.metric("Всего точек на карте", len(st.session_state.global_map_x))
+    else:
+        col1.metric("Батарея", f"{battery}%")
+        col2.metric("Скорость", f"{speed} м/с")
+        col3.metric("Рыскание", f"{yaw}°")
+        col4.metric("Наклон", f"{tilt}°")
+    
     col5.metric("Сенсоры", sensor_status)
-    col6.metric("Канал", data_source)
+    col6.metric("Канал", "FILE" if uploaded_lidar_file else data_source)
     col7.metric("Точек лидара", lidar_points_count)
     col8.metric("Задержка", f"{read_latency_ms} мс")
     col9.metric("Последний пакет", last_packet_time)
@@ -401,8 +533,7 @@ if show_metrics and st.session_state.telemetry_history:
 
 if show_metrics:
     with st.expander("Состояние сенсоров и телеметрии"):
-
-        connection_ok = st.session_state.connected
+        connection_ok = st.session_state.connected or uploaded_lidar_file is not None
         lidar_ok = not lidar_df.empty
         position_ok = raw_state.get("x") is not None and raw_state.get("y") is not None
         battery_ok = battery is not None and battery > 0
@@ -419,9 +550,9 @@ if show_metrics:
         st.dataframe(sensor_df, use_container_width=True)
 
 
-
-
-# Visualization
+# ============================================
+# Main visualization (Plotly)
+# ============================================
 
 fig = go.Figure()
 
@@ -461,7 +592,6 @@ if show_room_contour and not room_df.empty:
         )
     )
 
-
 if show_trajectory and st.session_state.trajectory:
     tx = [p[0] for p in st.session_state.trajectory]
     ty = [p[1] for p in st.session_state.trajectory]
@@ -476,7 +606,17 @@ if show_trajectory and st.session_state.trajectory:
     )
 
 if show_robot:
-    rx, ry = robot_shape(robot_x, robot_y, yaw)
+    # Определяем координаты робота для отображения
+    if uploaded_lidar_file is not None and not st.session_state.connected:
+        robot_x_display = 0
+        robot_y_display = 0
+        yaw_display = 0
+    else:
+        robot_x_display = robot_x
+        robot_y_display = robot_y
+        yaw_display = yaw
+    
+    rx, ry = robot_shape(robot_x_display, robot_y_display, yaw_display)
 
     fig.add_trace(
         go.Scatter(
@@ -488,25 +628,21 @@ if show_robot:
         )
     )
 
-    yaw_rad = math.radians(yaw)
+    yaw_rad = math.radians(yaw_display)
 
     fig.add_trace(
         go.Scatter(
-            x=[robot_x, robot_x + math.cos(yaw_rad) * 450],
-            y=[robot_y, robot_y + math.sin(yaw_rad) * 450],
+            x=[robot_x_display, robot_x_display + math.cos(yaw_rad) * 450],
+            y=[robot_y_display, robot_y_display + math.sin(yaw_rad) * 450],
             mode="lines+markers",
             name="Direction",
             line=dict(width=3)
         )
     )
 
-if (
-    show_cv_map
-    and lidar_data_available
-    and not lidar_df.empty
-    and "global_x" in lidar_df.columns
-    and "global_y" in lidar_df.columns
-):
+if (show_cv_map and lidar_data_available and not lidar_df.empty
+    and "global_x" in lidar_df.columns and "global_y" in lidar_df.columns):
+
     lidar_df["range_from_robot"] = np.sqrt(
         (lidar_df["global_x"] - robot_x) ** 2 +
         (lidar_df["global_y"] - robot_y) ** 2
@@ -566,8 +702,12 @@ st.plotly_chart(
     }
 )
 
-if show_cv_map and st.session_state.global_map_x:
 
+# ============================================
+# OpenCV Map
+# ============================================
+
+if show_cv_map and st.session_state.global_map_x:
     cv_map, cv_stats = build_occupancy_map(
         st.session_state.global_map_x,
         st.session_state.global_map_y,
@@ -637,13 +777,9 @@ if show_cv_map and st.session_state.global_map_x:
         use_container_width=False
     )
 
-    
-
     if st.button("Сохранить OpenCV-карту PNG"):
         filename = f"opencv_map_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-
         cv2.imwrite(filename, cv2.cvtColor(cv_map, cv2.COLOR_RGB2BGR))
-
         st.success(f"OpenCV-карта сохранена: {filename}")
 
     if st.session_state.danger_events:
@@ -669,6 +805,11 @@ if show_cv_map and st.session_state.global_map_x:
                     st.session_state.last_danger_event_time = None
                     st.rerun()
 
+
+# ============================================
+# Occupancy Grid (original)
+# ============================================
+
 if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns:
     st.session_state.occupancy_grid = update_occupancy_grid(
         st.session_state.occupancy_grid,
@@ -691,7 +832,7 @@ if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns
         "Тёмное — неизвестная область, "
         "серое — свободное пространство, "
         "чёрное — препятствия, "
-        "красное — робот"
+        "синее — робот"
     )
 
     st.image(
@@ -700,7 +841,89 @@ if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns
         use_container_width=False
     )
 
+
+# ============================================
+# Enhanced Clean 2D Map
+# ============================================
+
+if show_enhanced_map:
+    st.markdown("---")
+    st.header("🗺️ Четкая 2D карта помещения")
+
+    map_stats = st.session_state.enhanced_grid.get_statistics()
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Размер сетки", f"{map_stats['grid_size']}×{map_stats['grid_size']}")
+    with col2:
+        st.metric("Разрешение", f"{map_stats['cell_size_mm']} мм/пикс")
+    with col3:
+        st.metric("Препятствий", map_stats['obstacle_count'])
+    with col4:
+        st.metric("Покрытие", f"{map_stats['coverage_percent']:.1f}%")
+
+    try:
+        # Определяем координаты робота для отображения
+        if uploaded_lidar_file is not None and not st.session_state.connected:
+            robot_x_display = 0
+            robot_y_display = 0
+            yaw_display = 0
+            trajectory_display = [(0, 0)] if st.session_state.trajectory else None
+        else:
+            robot_x_display = robot_x
+            robot_y_display = robot_y
+            yaw_display = yaw
+            trajectory_display = st.session_state.cleaned_trajectory if show_trajectory else None
+        
+        enhanced_map_img = st.session_state.enhanced_grid.render_as_image(
+            show_robot=True,
+            robot_x=robot_x_display if st.session_state.connected or uploaded_lidar_file else None,
+            robot_y=robot_y_display if st.session_state.connected or uploaded_lidar_file else None,
+            robot_yaw_deg=yaw_display if st.session_state.connected or uploaded_lidar_file else None,
+            show_trajectory=show_trajectory,
+            trajectory=trajectory_display,
+            image_scale=3
+        )
+
+        st.image(enhanced_map_img, use_container_width=True)
+
+        with st.expander("📖 Легенда карты"):
+            st.markdown("""
+            - **⬛ Черный** — препятствия (стены, объекты)
+            - **⬜ Белый** — свободное пространство
+            - **⬜ Светло-серый** — неизвестная область
+            - **🔵 Синий круг** — положение робота
+            - **🟡 Желтая линия** — траектория движения
+            """)
+
+        col_png, col_csv, col_stats = st.columns(3)
+
+        with col_png:
+            if st.button("📸 Экспортировать как PNG"):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"clean_map_{timestamp}.png"
+                img_to_save = st.session_state.enhanced_grid.render_as_image(
+                    show_robot=False, image_scale=1
+                )
+                cv2.imwrite(filename, img_to_save)
+                st.success(f"Сохранено: {filename}")
+
+        with col_csv:
+            if st.button("📊 Экспортировать данные CSV"):
+                _, csv_file = st.session_state.enhanced_grid.export_map("robot_map")
+                st.success(f"Сохранено: {csv_file}")
+
+        with col_stats:
+            if st.button("📈 Детальная статистика"):
+                st.json(map_stats)
+
+    except Exception as e:
+        st.error(f"Ошибка отображения четкой карты: {e}")
+
+
+# ============================================
 # Auto update
+# ============================================
 
 if st.session_state.running:
     time.sleep(refresh_rate)
