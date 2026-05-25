@@ -12,8 +12,6 @@ def get_data(num: int):
         )
 
         text = response.text.strip().replace(",", ".")
-        # print(f"data{num} = {text}")  # временно для проверки
-
         return float(text)
 
     except Exception as e:
