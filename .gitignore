@@ -8,3 +8,6 @@ danger_events_*.csv
 telemetry_log.csv"data/" 
 "output/" 
 "lidar_parser_delta2b.py" 
+data/ 
+output/ 
+lidar_parser_delta2b.py 
