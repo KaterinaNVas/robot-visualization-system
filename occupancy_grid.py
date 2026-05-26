@@ -5,7 +5,7 @@ import numpy as np
 UNKNOWN = 80
 FREE = 190
 OCCUPIED = 0
-ROBOT_COLOR = (255, 0, 0)  # синий в OpenCV BGR
+ROBOT_COLOR = (255, 0, 0)
 
 
 def world_to_grid(x, y, map_size_mm, image_size_px):
@@ -120,12 +120,6 @@ def update_occupancy_grid(
             -1
         )
 
-    # kernel = np.ones((3, 3), np.uint8)
-
-    # occupied_mask = (grid == OCCUPIED).astype(np.uint8) * 255
-    # occupied_mask = cv2.dilate(occupied_mask, kernel, iterations=1)
-
-    # grid[occupied_mask > 0] = OCCUPIED
 
     occupied_mask = (grid == OCCUPIED).astype(np.uint8)
 

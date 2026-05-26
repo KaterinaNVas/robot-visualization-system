@@ -22,8 +22,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============================================
-# Session state initialization
+
 # ============================================
 
 if "trajectory" not in st.session_state:
@@ -56,13 +55,10 @@ if "telemetry_history" not in st.session_state:
 if "occupancy_grid" not in st.session_state:
     st.session_state.occupancy_grid = init_occupancy_grid()
 
-# Новая чистая карта - увеличенный размер
 if "clean_map" not in st.session_state:
     st.session_state.clean_map = CleanMap(map_size_mm=20000, cell_size_mm=25)
 
 
-# ============================================
-# Sidebar
 # ============================================
 
 st.title("Система Визуализации Робота")
@@ -125,7 +121,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Visualization toggles
     show_lidar = st.checkbox("Показывать лидар", value=True)
     show_trajectory = st.checkbox("Показывать траекторию", value=True)
     show_robot = st.checkbox("Показывать робота", value=True)
@@ -136,7 +131,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Настройки четкой карты
     st.subheader("🗺️ Настройки четкой карты")
     show_clean_map = st.checkbox("Показывать четкую 2D карту", value=True)
 
@@ -153,7 +147,6 @@ with st.sidebar:
             st.session_state.clean_map.clear()
             st.rerun()
 
-    # Обновление размера ячейки
     if cell_size != st.session_state.clean_map.cell_size_mm:
         st.session_state.clean_map = CleanMap(map_size_mm=20000, cell_size_mm=cell_size)
 
@@ -169,7 +162,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Map settings
     max_points = st.slider(
         "Количество точек карты",
         min_value=200,
@@ -250,8 +242,6 @@ with st.sidebar:
 
 
 # ============================================
-# Helper functions
-# ============================================
 
 def robot_shape(x, y, yaw):
     length = 400
@@ -274,8 +264,6 @@ def robot_shape(x, y, yaw):
 
 
 # ============================================
-# Read data
-# ============================================
 
 read_start_time = time.time()
 
@@ -293,7 +281,6 @@ if raw_state is None:
         "battery": 0, "tilt": 0, "lidar": []
     }
 
-# Если загружен HEX-файл
 if uploaded_lidar_file is not None:
     hex_text = uploaded_lidar_file.read().decode("utf-8")
     parsed_lidar = parse_lidar_data(hex_text, lidar_model)
@@ -317,8 +304,6 @@ battery = raw_state.get("battery") or 0
 tilt = raw_state.get("tilt") or 0
 
 
-# ============================================
-# Telemetry logging
 # ============================================
 
 if st.session_state.connected:
@@ -344,8 +329,6 @@ if record_telemetry and st.session_state.connected:
 
 
 # ============================================
-# Update map data
-# ============================================
 
 if st.session_state.connected:
     st.session_state.trajectory.append((robot_x, robot_y))
@@ -357,7 +340,6 @@ room_df = build_room_contour(
     max_distance_mm=max_distance_mm
 )
 
-# Обработка данных для глобальной карты
 if lidar_data_available and not lidar_df.empty:
     if uploaded_lidar_file is not None and not st.session_state.connected:
         lidar_df["global_x"] = lidar_df["x"]
@@ -382,8 +364,6 @@ st.session_state.trajectory = st.session_state.trajectory[-300:]
 
 
 # ============================================
-# Чистая карта - обновление
-# ============================================
 
 if show_clean_map and lidar_data_available and not lidar_df.empty:
     try:
@@ -393,8 +373,6 @@ if show_clean_map and lidar_data_available and not lidar_df.empty:
         st.error(f"Ошибка обновления карты: {e}")
 
 
-# ============================================
-# Metrics display
 # ============================================
 
 if show_metrics:
@@ -419,8 +397,6 @@ if show_metrics:
     col9.metric("Пакет", last_packet_time)
 
 
-# ============================================
-# Main visualization (Plotly)
 # ============================================
 
 fig = go.Figure()
@@ -488,8 +464,6 @@ st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": False, "dis
 
 
 # ============================================
-# OpenCV Map
-# ============================================
 
 if show_cv_map and st.session_state.global_map_x:
     cv_map, cv_stats = build_occupancy_map(
@@ -534,8 +508,6 @@ if show_cv_map and st.session_state.global_map_x:
 
 
 # ============================================
-# Occupancy Grid
-# ============================================
 
 if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns:
     st.session_state.occupancy_grid = update_occupancy_grid(
@@ -548,13 +520,6 @@ if show_occupancy_grid and not lidar_df.empty and "global_x" in lidar_df.columns
     st.image(occupancy_image, use_container_width=False)
 
 
-
-
-
-
-
-# ============================================
-# ОТЛАДКА - что реально в данных
 # ============================================
 
 if lidar_data_available and not lidar_df.empty:
@@ -564,7 +529,6 @@ if lidar_data_available and not lidar_df.empty:
         st.write(f"**Y (мм):** мин={lidar_df['y'].min():.1f}, макс={lidar_df['y'].max():.1f}")
         st.write(f"**Расстояния (мм):** мин={lidar_df['distance'].min():.1f}, макс={lidar_df['distance'].max():.1f}")
         
-        # Простой scatter plot точек
         fig_debug, ax_debug = plt.subplots(figsize=(8, 8))
         scatter = ax_debug.scatter(lidar_df['x'], lidar_df['y'], c=lidar_df['distance'], 
                                    cmap='viridis', s=1, alpha=0.5)
@@ -576,7 +540,6 @@ if lidar_data_available and not lidar_df.empty:
         st.pyplot(fig_debug)
         plt.close(fig_debug)
         
-        # Полярный график
         fig_polar, ax_polar = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
         angles_rad = np.radians(lidar_df['angle'])
         ax_polar.scatter(angles_rad, lidar_df['distance'], c=lidar_df['distance'], 
@@ -586,7 +549,6 @@ if lidar_data_available and not lidar_df.empty:
         st.pyplot(fig_polar)
         plt.close(fig_polar)
         
-        # Проверка распределения углов
         st.write("### 📐 Проверка углов")
         
         fig_angles, ax_angles = plt.subplots(figsize=(10, 4))
@@ -597,7 +559,6 @@ if lidar_data_available and not lidar_df.empty:
         st.pyplot(fig_angles)
         plt.close(fig_angles)
         
-        # Проверка: все ли углы присутствуют
         unique_angles = lidar_df['angle'].unique()
         st.write(f"**Уникальных углов:** {len(unique_angles)} из 360 возможных")
         st.write(f"**Диапазон углов:** {lidar_df['angle'].min():.1f}° - {lidar_df['angle'].max():.1f}°")
@@ -607,20 +568,16 @@ if lidar_data_available and not lidar_df.empty:
         else:
             st.success("✅ Углы покрывают полные 360°")
         
-        # Выборка точек
         st.write("**Первые 20 точек:**")
         st.dataframe(lidar_df[['angle', 'distance', 'x', 'y']].head(20))
 
 
-# ============================================
-# АНАЛИЗ ФОРМЫ КОМНАТЫ
 # ============================================
 
 if lidar_data_available and not lidar_df.empty:
     with st.expander("📐 Анализ формы комнаты", expanded=True):
         st.write("### Анализ данных лидара")
         
-        # Основная статистика
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Всего точек", len(lidar_df))
@@ -631,7 +588,6 @@ if lidar_data_available and not lidar_df.empty:
         with col4:
             st.metric("Среднее расстояние", f"{lidar_df['distance'].mean():.0f} мм")
         
-        # 1. Ближние точки (0.5-2 м) - возможно мебель
         st.write("### 1. Ближние объекты (0.5 - 2 метра)")
         lidar_near = lidar_df[(lidar_df['distance'] > 500) & (lidar_df['distance'] < 2000)]
         
@@ -648,7 +604,6 @@ if lidar_data_available and not lidar_df.empty:
         else:
             st.info("Нет ближних объектов (0.5-2 м)")
         
-        # 2. Средние точки (2-5 м) - основные стены
         st.write("### 2. Основные стены (2 - 5 метров)")
         lidar_mid = lidar_df[(lidar_df['distance'] >= 2000) & (lidar_df['distance'] < 5000)]
         
@@ -665,7 +620,6 @@ if lidar_data_available and not lidar_df.empty:
         else:
             st.info("Нет точек в диапазоне 2-5 м")
         
-        # 3. Дальние точки (5-8 м) - дальние стены/шум
         st.write("### 3. Дальние объекты (5 - 8 метров)")
         lidar_far = lidar_df[(lidar_df['distance'] >= 5000) & (lidar_df['distance'] < 8000)]
         
@@ -682,10 +636,8 @@ if lidar_data_available and not lidar_df.empty:
         else:
             st.info("Нет точек в диапазоне 5-8 м")
         
-        # 4. Анализ углов - где есть стены
         st.write("### 4. Распределение расстояний по направлениям")
         
-        # Разбиваем на 8 секторов по 45 градусов
         sectors = []
         sector_names = []
         for i in range(8):
@@ -700,7 +652,6 @@ if lidar_data_available and not lidar_df.empty:
                 sectors.append(0)
                 sector_names.append(f"{start_angle}°-{end_angle}°")
         
-        # Барчарт направлений
         fig_bar, ax_bar = plt.subplots(figsize=(10, 5))
         bars = ax_bar.bar(sector_names, sectors, color='skyblue')
         ax_bar.set_xlabel("Направление (градусы)")
@@ -708,7 +659,6 @@ if lidar_data_available and not lidar_df.empty:
         ax_bar.set_title("Среднее расстояние по направлениям")
         ax_bar.set_ylim(0, max(sectors) * 1.2 if sectors else 8000)
         
-        # Подписываем значения на барах
         for bar, dist in zip(bars, sectors):
             if dist > 0:
                 ax_bar.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 100,
@@ -718,10 +668,8 @@ if lidar_data_available and not lidar_df.empty:
         st.pyplot(fig_bar)
         plt.close(fig_bar)
         
-        # 5. Вывод рекомендаций
         st.write("### 📋 Рекомендации")
         
-        # Определяем тип данных
         if len(lidar_near) > 100:
             st.success("✅ **Обнаружены ближние объекты** - возможно мебель или стены близко")
         else:
@@ -732,7 +680,6 @@ if lidar_data_available and not lidar_df.empty:
         else:
             st.warning("⚠️ **Мало данных о стенах** - возможно лидар стоит в центре большого помещения")
         
-        # Определяем форму
         max_dist = max(sectors) if sectors else 0
         min_dist = min([d for d in sectors if d > 0]) if sectors else 0
         ratio = max_dist / min_dist if min_dist > 0 else 1
@@ -746,7 +693,6 @@ if lidar_data_available and not lidar_df.empty:
         
         st.caption(f"Соотношение макс/мин расстояний: {ratio:.2f}")
         
-        # 6. Предложение преобразования
         st.write("### 🔧 Что делать дальше?")
         
         if ratio < 1.3:
@@ -770,17 +716,13 @@ if lidar_data_available and not lidar_df.empty:
 
 
 # ============================================
-# ПРЕОБРАЗОВАНИЕ КРУГА В КВАДРАТНУЮ КОМНАТУ (ДЕМО)
-# ============================================
 
 if lidar_data_available and not lidar_df.empty:
     with st.expander("🏠 Демо: Преобразование в квадратную комнату", expanded=True):
         st.warning("⚠️ Это демонстрационное преобразование! Для реальной карты нужны новые данные.")
         
-        # Преобразуем круговые данные в квадратные
         lidar_demo = lidar_df.copy()
         
-        # Искусственно создаем квадратную форму
         x_demo = []
         y_demo = []
         
@@ -788,14 +730,12 @@ if lidar_data_available and not lidar_df.empty:
             angle_rad = np.radians(row['angle'])
             dist = row['distance']
             
-            # Преобразуем круг в квадрат
             corner_factor = 1 / (abs(np.cos(angle_rad)) + abs(np.sin(angle_rad)))
             new_dist = dist * min(1.0, corner_factor * 0.7)
             
             x_demo.append(new_dist * np.cos(angle_rad))
             y_demo.append(new_dist * np.sin(angle_rad))
         
-        # Ограничиваем размер комнаты
         x_demo = np.array(x_demo)
         y_demo = np.array(y_demo)
         mask = (np.abs(x_demo) < 4000) & (np.abs(y_demo) < 4000)
@@ -824,8 +764,7 @@ if lidar_data_available and not lidar_df.empty:
           3. Повторить сканирование
         """)
 
-# ============================================
-# Чистая 2D карта - улучшенное отображение
+
 # ============================================
 
 if show_clean_map:
@@ -836,7 +775,6 @@ if show_clean_map:
         try:
             stats = st.session_state.clean_map.get_statistics()
             
-            # Показываем реальные размеры комнаты
             col_a, col_b, col_c, col_d = st.columns(4)
             with col_a:
                 st.metric("Точек на карте", stats['points_count'])
@@ -853,12 +791,10 @@ if show_clean_map:
             with col_d:
                 st.metric("Препятствий", stats['obstacle_count'])
             
-            # Отображаем карту с автоцентрированием
             fig = st.session_state.clean_map.render_with_matplotlib(figsize=(8, 8))
             st.pyplot(fig)
             plt.close(fig)
             
-            # Легенда
             st.caption("""
             📖 **Легенда:**
             - ⬛ **Черный** — стены и препятствия (данные лидара)
@@ -866,7 +802,6 @@ if show_clean_map:
             - 🔴 **Красные линии** — оси X и Y (центр карты)
             """)
             
-            # Кнопки управления
             col_exp, col_clr = st.columns(2)
             with col_exp:
                 if st.button("💾 Экспортировать карту (PNG)"):
@@ -884,8 +819,6 @@ if show_clean_map:
         st.info("📡 Нет данных лидара. Загрузите HEX файл или подключитесь к роботу.")
 
 
-# ============================================
-# Auto update
 # ============================================
 
 if st.session_state.running:

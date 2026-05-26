@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-Четкая 2D карта помещения - автоцентрирование и фильтрация шума
-"""
 
 import numpy as np
 import pandas as pd
@@ -24,16 +21,13 @@ class CleanMap:
         if points_df is None or points_df.empty:
             return
         
-        # Сохраняем все точки для автоцентрирования
         self.all_points_x.extend(points_df['x'].tolist())
         self.all_points_y.extend(points_df['y'].tolist())
         
-        # Автоцентрирование: находим центр масс точек
         if len(self.all_points_x) > 100:
             center_x = np.median(self.all_points_x)
             center_y = np.median(self.all_points_y)
             
-            # Сдвигаем offset, чтобы центр оказался в середине карты
             self.offset = self.map_size_mm // 2 - center_x
             self.offset_y = self.map_size_mm // 2 - center_y
         else:
@@ -59,17 +53,14 @@ class CleanMap:
         self.update_count = 0
     
     def render_with_matplotlib(self, figsize=(10, 10)):
-        """Визуализация с автоцентрированием и ограничением по данным"""
         fig, ax = plt.subplots(figsize=figsize)
         
-        # Находим реальные границы по точкам
         if len(self.all_points_x) > 0:
             x_min = np.percentile(self.all_points_x, 2)
             x_max = np.percentile(self.all_points_x, 98)
             y_min = np.percentile(self.all_points_y, 2)
             y_max = np.percentile(self.all_points_y, 98)
             
-            # Добавляем отступ 20%
             x_margin = (x_max - x_min) * 0.2
             y_margin = (y_max - y_min) * 0.2
             x_min, x_max = x_min - x_margin, x_max + x_margin
@@ -78,12 +69,10 @@ class CleanMap:
             x_min, x_max = -5000, 5000
             y_min, y_max = -5000, 5000
         
-        # Показываем карту
         im = ax.imshow(self.grid, cmap='gray', origin='lower',
                        extent=[-self.map_size_mm/2, self.map_size_mm/2,
                               -self.map_size_mm/2, self.map_size_mm/2])
         
-        # Устанавливаем границы по реальным данным
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         
